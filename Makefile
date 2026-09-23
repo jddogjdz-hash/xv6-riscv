@@ -1,9 +1,5 @@
 K=kernel
 U=user
-	$U/_uptime\
-	$U/_time1\
-	$U/_matmul\
-	$U/_sleep\
   $K/entry.o \
   $K/start.o \
   $K/console.o \
@@ -132,8 +128,11 @@ mkfs/mkfs: mkfs/mkfs.c $K/fs.h $K/param.h
 .PRECIOUS: %.o
 
 UPROGS=\
-    $U/_time1\
 	$U/_uptime\
+	$U/_time1\
+	$U/_time\
+	$U/_matmul\
+	$U/_sleep\
 	$U/_cat\
 	$U/_echo\
 	$U/_forktest\

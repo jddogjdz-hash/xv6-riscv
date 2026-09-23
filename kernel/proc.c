@@ -4,6 +4,7 @@
 #include "riscv.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "pstat.h"
 #include "defs.h"
 
 struct cpu cpus[NCPU];
@@ -413,6 +414,60 @@ kwait(uint64 addr)
 
     // Wait for a child to exit.
     sleep_prepare(p); //DOC: wait-sleep
+    release(&wait_lock);
+    sleep();
+    acquire(&wait_lock);
+  }
+}
+
+// Wait for a child process to exit and return its pid, exit status, and usage.
+// Return -1 if this process has no children.
+int
+kwait2(uint64 status_addr, uint64 rusage_addr)
+{
+  struct proc *pp;
+  int havekids, pid;
+  struct proc *p = myproc();
+  struct rusage usage;
+
+  acquire(&wait_lock);
+
+  for (;;) {
+    havekids = 0;
+    for (pp = proc; pp < &proc[NPROC]; pp++) {
+      if (pp->parent == p) {
+        acquire(&pp->lock);
+
+        havekids = 1;
+        if (pp->state == ZOMBIE) {
+          pid = pp->pid;
+          usage.cputime = pp->cputime;
+          if ((status_addr != 0 &&
+               copyout(p->pagetable, p->sz, status_addr, (char *)&pp->xstate,
+                       sizeof(pp->xstate)) < 0) ||
+              (rusage_addr != 0 &&
+               copyout(p->pagetable, p->sz, rusage_addr, (char *)&usage,
+                       sizeof(usage)) < 0)) {
+            release(&pp->lock);
+            release(&wait_lock);
+            return -1;
+          }
+          pp->parent = 0;
+          freeproc(pp);
+          release(&pp->lock);
+          release(&wait_lock);
+          return pid;
+        }
+        release(&pp->lock);
+      }
+    }
+
+    if (!havekids || killed(p)) {
+      release(&wait_lock);
+      return -1;
+    }
+
+    sleep_prepare(p);
     release(&wait_lock);
     sleep();
     acquire(&wait_lock);
